@@ -1,0 +1,28 @@
+# Audio files (generated)
+*.wav
+*.mp3
+*.ogg
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Temp files
+*.tmp
+*.temp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+*~
+
+# Local config (if any)
+.env
+config.local.sh
