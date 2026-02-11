@@ -198,6 +198,14 @@ Prune entries older than 7 days with `scripts/prune_reported.sh`.
 0 6 * * * cd ~/src/ai_podcast && ./scripts/generate_broadcast.sh >> ~/logs/broadcast.log 2>&1
 ```
 
+## Sample Output
+
+Listen to an actual broadcast generated with this system:
+
+**[examples/output/sample_broadcast.mp3](examples/output/sample_broadcast.mp3)** (~6 min, 6.3MB)
+
+This was generated entirely on a Raspberry Pi 5 using Kokoro TTS -- no cloud APIs.
+
 ## License
 
 MIT - Do whatever you want with this.

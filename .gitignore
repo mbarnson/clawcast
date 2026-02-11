@@ -3,6 +3,9 @@
 *.mp3
 *.ogg
 
+# Exception: keep sample output
+!examples/output/sample_broadcast.mp3
+
 # Python
 __pycache__/
 *.pyc
