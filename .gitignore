@@ -3,8 +3,9 @@
 *.mp3
 *.ogg
 
-# Exception: keep sample output
+# Exception: keep sample output and theme music
 !examples/output/sample_broadcast.mp3
+!assets/shovel-theme.mp3
 
 # Python
 __pycache__/
