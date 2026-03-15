@@ -23,6 +23,15 @@ from datetime import date
 DEFAULT_API_BASE = "http://localhost:8000/v1"
 DEFAULT_MODEL = "Qwen/Qwen3.5-27B"
 
+# Map beats to correspondents (used with structured topics from fetch_news.py)
+BEAT_TO_CORRESPONDENT = {
+    "tech": "Nova",
+    "international": "Jessica",
+    "politics": "George",
+    "business": "Fable",
+    "quirky": "Puck",
+}
+
 # Voice assignments matching ClawCast character roster (Kokoro voice codes)
 CHARACTERS = {
     "shovel": {"role": "Host", "voice": "am_michael", "style": "Warm morning host, welcoming but not over-the-top"},
@@ -63,6 +72,8 @@ Return a JSON array where each element has:
 - "character": character name (shovel, nova, jessica, george, fable, puck)
 - "text": the spoken text for this segment
 - "type": "intro", "content", "handoff", or "outro"
+
+Each content segment should include a "sources" array with objects containing "title" and "url" for the news stories referenced in that segment. Handoff, intro, and outro segments should have an empty "sources" array.
 
 Return ONLY the JSON array, no other text."""
 
@@ -154,15 +165,19 @@ def write_segments(segments, output_dir):
         with open(filepath, "w") as f:
             f.write(text)
 
-        voice = CHARACTERS.get(character, {}).get("voice", "en_US-lessac-medium")
-        manifest.append({
+        voice = CHARACTERS.get(character, {}).get("voice", "am_michael")
+        entry = {
             "segment": num,
             "character": character,
             "type": seg_type,
             "file": filename,
             "voice": voice,
             "text_length": len(text),
-        })
+        }
+        # Include sources from LLM output if present
+        if "sources" in seg and seg["sources"]:
+            entry["sources"] = seg["sources"]
+        manifest.append(entry)
         print(f"  {filename} ({len(text)} chars)", file=sys.stderr)
 
     # Write manifest
@@ -197,20 +212,60 @@ def main():
     args = parser.parse_args()
 
     # Get topics
+    structured_topics = None  # JSON topics from fetch_news.py
     if args.demo:
         topics = DEMO_TOPICS
     elif args.topics:
         topics = [t.strip() for t in args.topics.split(",")]
     elif args.topics_file:
         with open(args.topics_file) as f:
-            topics = [line.strip() for line in f if line.strip()]
+            content = f.read().strip()
+            # Try JSON first (from fetch_news.py)
+            if content.startswith("["):
+                try:
+                    structured_topics = json.loads(content)
+                    topics = [t["title"] for t in structured_topics]
+                except (json.JSONDecodeError, KeyError):
+                    topics = [line.strip() for line in content.split("\n") if line.strip()]
+            else:
+                topics = [line.strip() for line in content.split("\n") if line.strip()]
     else:
         print("Error: Provide --topics, --topics-file, or --demo", file=sys.stderr)
         sys.exit(1)
 
     # Build prompt
-    topic_list = "\n".join(f"- {t}" for t in topics)
-    prompt = f"""Write a Shovel News broadcast script for {args.date}.
+    if structured_topics:
+        # Rich prompt with source material and citations
+        topic_blocks = []
+        for t in structured_topics:
+            block = f"- **{t['title']}**"
+            if t.get("summary"):
+                block += f"\n  Context: {t['summary']}"
+            if t.get("url"):
+                block += f"\n  Source: {t['url']} ({t.get('source', 'unknown')})"
+            if t.get("beat"):
+                block += f"\n  Beat: {t['beat']} (assign to {BEAT_TO_CORRESPONDENT.get(t['beat'], t['beat'])})"
+            topic_blocks.append(block)
+        topic_list = "\n".join(topic_blocks)
+
+        prompt = f"""Write a Shovel News broadcast script for {args.date}.
+
+Today's news stories (with source material — use these facts, do NOT invent details):
+{topic_list}
+
+Correspondent assignments:
+- Nova: tech/science stories
+- Jessica: international stories
+- George: politics/conflict stories
+- Fable: law/business stories
+- Puck: quirky/fun stories
+
+IMPORTANT: Each content segment MUST include a "sources" array referencing the stories used.
+Use the provided facts and context. Do NOT fabricate statistics or quotes.
+Combine related stories within a beat if needed. Every beat should have at least one story."""
+    else:
+        topic_list = "\n".join(f"- {t}" for t in topics)
+        prompt = f"""Write a Shovel News broadcast script for {args.date}.
 
 Today's news topics:
 {topic_list}
@@ -223,6 +278,16 @@ Assign topics to correspondents based on their beats:
 - Puck: quirky/fun topics
 
 If a topic doesn't fit a beat perfectly, assign it to the closest match. You may combine or expand on topics as needed to fill each correspondent's segment."""
+
+    # Also pass structured topics for source tracking in manifest
+    source_lookup = {}
+    if structured_topics:
+        for t in structured_topics:
+            source_lookup[t["title"].lower()[:60]] = {
+                "title": t["title"],
+                "url": t.get("url", ""),
+                "source": t.get("source", ""),
+            }
 
     # Generate
     print(f"Generating script for {args.date}...", file=sys.stderr)

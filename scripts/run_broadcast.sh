@@ -3,16 +3,19 @@
 # run_broadcast.sh - End-to-end broadcast generation (fully local)
 #
 # Pipeline:
+#   0. (Optional) Fetch news from RSS feeds
 #   1. Generate script with local LLM (Qwen3.5-27B via vLLM)
 #   2. Preprocess text for TTS
 #   3. Generate TTS for each segment (Kokoro)
 #   4. Speed up segments
 #   5. Concatenate
 #   6. Mix with theme music + loudness normalization
+#   7. Generate HTML show notes
 #
 # No cloud APIs. Everything runs locally.
 #
 # Usage:
+#   ./run_broadcast.sh --rss                     # Fetch real news + full pipeline
 #   ./run_broadcast.sh --demo                    # Demo with sample topics
 #   ./run_broadcast.sh --topics "AI news,space"  # Custom topics
 #   ./run_broadcast.sh --topics-file topics.txt  # Topics from file
@@ -34,15 +37,22 @@ export PATH="$HOME/bin:$PATH"
 usage() {
     echo "Usage: $0 [options]"
     echo
-    echo "Options:"
+    echo "News source (pick one):"
+    echo "  --rss                 Fetch real news from RSS feeds"
     echo "  --demo                Use sample topics"
     echo "  --topics TOPICS       Comma-separated news topics"
-    echo "  --topics-file FILE    File with one topic per line"
+    echo "  --topics-file FILE    File with topics (text or JSON from fetch_news.py)"
+    echo
+    echo "Options:"
     echo "  --date DATE           Broadcast date (default: today)"
     echo "  --output FILE         Output file (default: $OUTPUT_DIR/<date>.mp3)"
     echo "  --no-music            Skip theme music mixing"
+    echo "  --no-show-notes       Skip HTML show notes generation"
     echo "  --speed FACTOR        Playback speed (default: $SPEED)"
     echo "  --script-only         Generate script only, skip TTS"
+    echo "  --feeds FILE          Custom feeds config JSON (with --rss)"
+    echo "  --max-per-beat N      Max stories per beat (default: 3, with --rss)"
+    echo "  --no-dedup            Skip dedup against reported stories"
     echo
     echo "Environment:"
     echo "  VLLM_API_BASE         vLLM endpoint (default: http://localhost:8000/v1)"
@@ -55,9 +65,18 @@ SCRIPT_ARGS=""
 NO_MUSIC=false
 SCRIPT_ONLY=false
 OUTPUT_FILE=""
+USE_RSS=false
+NO_SHOW_NOTES=false
+FEEDS_FILE=""
+MAX_PER_BEAT=3
+NO_DEDUP=false
 
 while [ $# -gt 0 ]; do
     case "$1" in
+        --rss)
+            USE_RSS=true
+            shift
+            ;;
         --demo)
             SCRIPT_ARGS="$SCRIPT_ARGS --demo"
             shift
@@ -82,12 +101,28 @@ while [ $# -gt 0 ]; do
             NO_MUSIC=true
             shift
             ;;
+        --no-show-notes)
+            NO_SHOW_NOTES=true
+            shift
+            ;;
         --speed)
             SPEED="$2"
             shift 2
             ;;
         --script-only)
             SCRIPT_ONLY=true
+            shift
+            ;;
+        --feeds)
+            FEEDS_FILE="$2"
+            shift 2
+            ;;
+        --max-per-beat)
+            MAX_PER_BEAT="$2"
+            shift 2
+            ;;
+        --no-dedup)
+            NO_DEDUP=true
             shift
             ;;
         *)
@@ -97,7 +132,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-if [ -z "$SCRIPT_ARGS" ]; then
+if [ -z "$SCRIPT_ARGS" ] && [ "$USE_RSS" = false ]; then
     usage
 fi
 
@@ -113,6 +148,35 @@ echo "=== Shovel News Broadcast Generator ==="
 echo "Date: $TODAY"
 echo "Output: $OUTPUT_FILE"
 echo
+
+# ── Step 0: Fetch News (if --rss) ────────────────────────────────────
+if [ "$USE_RSS" = true ]; then
+    echo "▸ Step 0: Fetching news from RSS feeds..."
+
+    TOPICS_FILE="$SCRIPT_OUTPUT_DIR/topics.json"
+    FETCH_ARGS="--max-per-beat $MAX_PER_BEAT --date $TODAY -o $TOPICS_FILE --save-reported"
+
+    if [ -n "$FEEDS_FILE" ]; then
+        FETCH_ARGS="$FETCH_ARGS --feeds $FEEDS_FILE"
+    fi
+    if [ "$NO_DEDUP" = true ]; then
+        FETCH_ARGS="$FETCH_ARGS --no-dedup"
+    fi
+
+    python3 "$SCRIPT_DIR/fetch_news.py" $FETCH_ARGS
+
+    if [ ! -f "$TOPICS_FILE" ]; then
+        echo "Error: Failed to fetch news"
+        exit 1
+    fi
+
+    TOPIC_COUNT=$(python3 -c "import json; print(len(json.load(open('$TOPICS_FILE'))))")
+    echo "  Fetched $TOPIC_COUNT topics"
+    echo
+
+    # Set script args to use the topics file
+    SCRIPT_ARGS="--topics-file $TOPICS_FILE"
+fi
 
 # ── Step 1: Generate Script ──────────────────────────────────────────
 echo "▸ Step 1: Generating script with local LLM..."
@@ -248,15 +312,33 @@ else
         "$OUTPUT_FILE"
 fi
 
+# ── Step 6: Generate Show Notes ──────────────────────────────────────
+HTML_FILE="${OUTPUT_FILE%.mp3}.html"
+
+if [ "$NO_SHOW_NOTES" = false ]; then
+    echo
+    echo "▸ Step 6: Generating show notes..."
+
+    AUDIO_BASENAME=$(basename "$OUTPUT_FILE")
+    python3 "$SCRIPT_DIR/generate_show_notes.py" \
+        --manifest "$MANIFEST" \
+        --audio "$AUDIO_BASENAME" \
+        --date "$TODAY" \
+        -o "$HTML_FILE"
+
+    echo "  Show notes: $HTML_FILE"
+fi
+
 # ── Report ────────────────────────────────────────────────────────────
 echo
 echo "=== Broadcast Complete ==="
 OUTPUT_SIZE=$(du -h "$OUTPUT_FILE" | cut -f1)
 OUTPUT_DURATION=$(ffprobe -v error -show_entries format=duration \
     -of default=noprint_wrappers=1:nokey=1 "$OUTPUT_FILE")
-echo "  Output: $OUTPUT_FILE"
-echo "  Size: $OUTPUT_SIZE"
-echo "  Duration: ${OUTPUT_DURATION%.*}s"
+echo "  Audio: $OUTPUT_FILE ($OUTPUT_SIZE, ${OUTPUT_DURATION%.*}s)"
+if [ "$NO_SHOW_NOTES" = false ] && [ -f "$HTML_FILE" ]; then
+    echo "  Notes: $HTML_FILE"
+fi
 echo "  Script: $SCRIPT_OUTPUT_DIR/"
 echo
 echo "Play with: mpv $OUTPUT_FILE"
