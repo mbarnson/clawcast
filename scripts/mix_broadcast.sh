@@ -105,7 +105,7 @@ if [ "$NORMALIZE" = true ]; then
     ffmpeg -y -hide_banner -loglevel warning \
         -i "$VOICE_TRACK" \
         -af "loudnorm=I=${TARGET_LUFS}:TP=${TARGET_TP}:LRA=${TARGET_LRA}" \
-        -ar 44100 -c:a libmp3lame -b:a 128k \
+        -ar 44100 -c:a libmp3lame -b:a 256k \
         "$TMPDIR/voice_normalized.mp3"
     VOICE_TRACK="$TMPDIR/voice_normalized.mp3"
 fi
@@ -139,7 +139,7 @@ ffmpeg -y -hide_banner -loglevel warning \
     -i "$TMPDIR/theme_ducked.wav" \
     -i "$VOICE_TRACK" \
     -filter_complex "[1:a]adelay=${DELAY_MS}|${DELAY_MS}[v];[0:a][v]amix=inputs=2:duration=longest" \
-    -ar 44100 -c:a libmp3lame -b:a 128k \
+    -ar 44100 -c:a libmp3lame -b:a 256k \
     "$TMPDIR/mixed.mp3"
 
 # Step 4: Final loudnorm pass
@@ -148,7 +148,7 @@ if [ "$NORMALIZE" = true ]; then
     ffmpeg -y -hide_banner -loglevel warning \
         -i "$TMPDIR/mixed.mp3" \
         -af "loudnorm=I=${TARGET_LUFS}:TP=${TARGET_TP}:LRA=${TARGET_LRA}" \
-        -ar 44100 -c:a libmp3lame -b:a 128k \
+        -ar 44100 -c:a libmp3lame -b:a 256k \
         "$OUTPUT_FILE"
 else
     cp "$TMPDIR/mixed.mp3" "$OUTPUT_FILE"

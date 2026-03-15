@@ -5,7 +5,7 @@
 # Pipeline:
 #   1. Generate script with local LLM (Qwen3.5-27B via vLLM)
 #   2. Preprocess text for TTS
-#   3. Generate TTS for each segment (Piper)
+#   3. Generate TTS for each segment (Kokoro)
 #   4. Speed up segments
 #   5. Concatenate
 #   6. Mix with theme music + loudness normalization
@@ -141,7 +141,7 @@ fi
 
 # ── Step 2: Generate TTS ─────────────────────────────────────────────
 echo
-echo "▸ Step 2: Generating TTS with Piper..."
+echo "▸ Step 2: Generating TTS with Kokoro..."
 
 TMPDIR=$(mktemp -d)
 trap "rm -rf $TMPDIR" EXIT
@@ -171,13 +171,13 @@ print(s['character'])
         continue
     fi
 
-    # Preprocess text
+    # Preprocess text for TTS
     PREPPED=$(python3 "$SCRIPT_DIR/prep_for_tts.py" < "$INPUT_FILE")
 
     echo "  [$SEGMENT_NUM] $CHARACTER ($VOICE)..."
-    echo "$PREPPED" | python3 "$SCRIPT_DIR/generate_tts_piper.py" \
+    echo "$PREPPED" | python3 "$SCRIPT_DIR/generate_tts.py" \
         -v "$VOICE" \
-        -o "$OUTPUT_WAV" 2>/dev/null
+        -o "$OUTPUT_WAV"
 
     if [ ! -f "$OUTPUT_WAV" ]; then
         echo "  Error: TTS failed for segment $SEGMENT_NUM"
@@ -237,7 +237,7 @@ if [ "$NO_MUSIC" = true ] || [ ! -f "$THEME_FILE" ]; then
     ffmpeg -y -hide_banner -loglevel warning \
         -i "$VOICE_TRACK" \
         -af "loudnorm=I=-16:TP=-1.5:LRA=11" \
-        -ar 44100 -c:a libmp3lame -b:a 128k \
+        -ar 44100 -c:a libmp3lame -b:a 256k \
         "$OUTPUT_FILE"
 else
     echo

@@ -23,14 +23,14 @@ from datetime import date
 DEFAULT_API_BASE = "http://localhost:8000/v1"
 DEFAULT_MODEL = "Qwen/Qwen3.5-27B"
 
-# Voice assignments matching ClawCast character roster
+# Voice assignments matching ClawCast character roster (Kokoro voice codes)
 CHARACTERS = {
-    "shovel": {"role": "Host", "voice": "en_US-lessac-medium", "style": "Warm morning host, welcoming but not over-the-top"},
-    "nova": {"role": "Tech reporter", "voice": "en_US-amy-medium", "style": "Enthusiastic tech reporter, curious and engaged"},
-    "jessica": {"role": "International correspondent", "voice": "en_US-amy-medium", "style": "Calm, measured international correspondent"},
-    "george": {"role": "Politics/War correspondent", "voice": "en_US-joe-medium", "style": "Deep, serious, no-nonsense reporter"},
-    "fable": {"role": "Law/Business reporter", "voice": "en_GB-alan-medium", "style": "British accent, dry wit, thoughtful"},
-    "puck": {"role": "Quirky/fun reporter", "voice": "en_US-ryan-medium", "style": "Light, playful, conversational"},
+    "shovel": {"role": "Host", "voice": "am_michael", "style": "Warm morning host, welcoming but not over-the-top"},
+    "nova": {"role": "Tech reporter", "voice": "af_nova", "style": "Enthusiastic tech reporter, curious and engaged"},
+    "jessica": {"role": "International correspondent", "voice": "af_jessica", "style": "Calm, measured international correspondent"},
+    "george": {"role": "Politics/War correspondent", "voice": "bm_george", "style": "Deep, serious, no-nonsense reporter"},
+    "fable": {"role": "Law/Business reporter", "voice": "bm_fable", "style": "British accent, dry wit, thoughtful"},
+    "puck": {"role": "Quirky/fun reporter", "voice": "am_puck", "style": "Light, playful, conversational"},
 }
 
 SYSTEM_PROMPT = """You are a broadcast script writer for "Shovel News", an AI-generated daily news podcast.
